@@ -14,36 +14,58 @@ class EbookApp extends StatelessWidget {
     return MaterialApp(
       title: 'Ebook Library',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
-        fontFamily: 'Roboto',
+        fontFamily: 'Montserrat',
+        scaffoldBackgroundColor: Colors.deepPurple[50],
         appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.indigo,
+          backgroundColor: Colors.deepPurple,
           foregroundColor: Colors.white,
-          elevation: 4,
+          elevation: 6,
           centerTitle: true,
+          titleTextStyle: TextStyle(
+            fontFamily: 'Montserrat',
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
+            letterSpacing: 1.2,
+          ),
         ),
         cardTheme: CardTheme(
           color: Colors.white,
-          elevation: 6,
+          elevation: 8,
+          shadowColor: Colors.deepPurpleAccent.withOpacity(0.2),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
           ),
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: Colors.indigo[50],
+          fillColor: Colors.deepPurple[100],
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             borderSide: BorderSide.none,
           ),
+          hintStyle: TextStyle(color: Colors.deepPurple[300]),
         ),
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
           backgroundColor: Colors.white,
-          selectedItemColor: Colors.indigo,
-          unselectedItemColor: Colors.grey,
-          elevation: 8,
+          selectedItemColor: Colors.deepPurple,
+          unselectedItemColor: Colors.deepPurpleAccent,
+          elevation: 12,
           type: BottomNavigationBarType.fixed,
+          selectedLabelStyle: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        snackBarTheme: SnackBarThemeData(
+          backgroundColor: Colors.deepPurple[400],
+          contentTextStyle: const TextStyle(color: Colors.white),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: Colors.deepPurple,
+          foregroundColor: Colors.white,
         ),
       ),
       home: const BookLibraryScreen(),
@@ -98,42 +120,74 @@ class _BookLibraryScreenState extends State<BookLibraryScreen> {
   bool _isLoading = false;
   bool _isDashboardLoading = true;
   int _selectedIndex = 0;
+  bool _isDarkMode = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadDashboardBooks();
+  void _toggleTheme() {
+    setState(() {
+      _isDarkMode = !_isDarkMode;
+      if (_isDarkMode) {
+        // Set dark theme
+        WidgetsBinding.instance.window.platformBrightness == Brightness.dark;
+      }
+    });
   }
 
-  // Load dashboard books from Google Books API
-  Future<void> _loadDashboardBooks() async {
-    try {
-      final response = await http.get(
-        Uri.parse(
-          'https://www.googleapis.com/books/v1/volumes?q=flutter&maxResults=4',
-        ),
+  void _suggestRandomBook() {
+    final allBooks = [..._dashboardBooks, ..._books];
+    if (allBooks.isNotEmpty) {
+      final randomBook = (allBooks..shuffle()).first;
+      showDialog(
+        context: context,
+        builder:
+            (context) => AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: Text(
+                randomBook.title,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (randomBook.thumbnailUrl != null)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          randomBook.thumbnailUrl!,
+                          height: 120,
+                        ),
+                      ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'by ${randomBook.author}',
+                      style: const TextStyle(fontStyle: FontStyle.italic),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      randomBook.description,
+                      maxLines: 5,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
+                ),
+              ],
+            ),
       );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final items = data['items'] as List<dynamic>?;
-
-        if (items != null) {
-          setState(() {
-            _dashboardBooks = items.map((item) => Book.fromJson(item)).toList();
-            _isDashboardLoading = false;
-          });
-        }
-      }
-    } catch (e) {
-      setState(() {
-        _isDashboardLoading = false;
-      });
-      print('Error loading dashboard books: $e');
+    } else {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No books to suggest!')));
     }
   }
 
-  // Search books using Google Books API
   Future<void> _searchBooks(String query) async {
     if (query.trim().isEmpty) {
       setState(() {
@@ -141,22 +195,18 @@ class _BookLibraryScreenState extends State<BookLibraryScreen> {
       });
       return;
     }
-
     setState(() {
       _isLoading = true;
     });
-
     try {
       final response = await http.get(
         Uri.parse(
           'https://www.googleapis.com/books/v1/volumes?q=${Uri.encodeComponent(query)}&maxResults=10',
         ),
       );
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final items = data['items'] as List<dynamic>?;
-
         setState(() {
           if (items != null) {
             _books = items.map((item) => Book.fromJson(item)).toList();
@@ -185,7 +235,6 @@ class _BookLibraryScreenState extends State<BookLibraryScreen> {
       final isAlreadyFavorite = _favorites.any(
         (fav) => fav.title == book.title,
       );
-
       if (isAlreadyFavorite) {
         _favorites.removeWhere((fav) => fav.title == book.title);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -206,28 +255,81 @@ class _BookLibraryScreenState extends State<BookLibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Ebook Library'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 2,
-      ),
-      body: _selectedIndex == 0 ? _buildSearchTab() : _buildFavoritesTab(),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.favorite),
-            label: 'Favorites',
-          ),
-        ],
+    return Theme(
+      data:
+          _isDarkMode
+              ? ThemeData.dark().copyWith(
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: Colors.deepPurple,
+                  brightness: Brightness.dark,
+                ),
+                scaffoldBackgroundColor: Colors.grey[900],
+                appBarTheme: const AppBarTheme(
+                  backgroundColor: Colors.black87,
+                  foregroundColor: Colors.white,
+                ),
+                cardTheme: CardTheme(
+                  color: Colors.grey[850],
+                  elevation: 8,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                inputDecorationTheme: InputDecorationTheme(
+                  filled: true,
+                  fillColor: Colors.grey[800],
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+                  backgroundColor: Colors.black,
+                  selectedItemColor: Colors.deepPurpleAccent,
+                  unselectedItemColor: Colors.white70,
+                ),
+              )
+              : Theme.of(context),
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Ebook Library'),
+          actions: [
+            IconButton(
+              icon: Icon(_isDarkMode ? Icons.light_mode : Icons.dark_mode),
+              tooltip: 'Toggle Theme',
+              onPressed: _toggleTheme,
+            ),
+            IconButton(
+              icon: const Icon(Icons.auto_awesome),
+              tooltip: 'Suggest a Book',
+              onPressed: _suggestRandomBook,
+            ),
+          ],
+        ),
+        body: _selectedIndex == 0 ? _buildSearchTab() : _buildFavoritesTab(),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _selectedIndex,
+          onTap: (index) {
+            setState(() {
+              _selectedIndex = index;
+            });
+          },
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.favorite),
+              label: 'Favorites',
+            ),
+          ],
+        ),
+        floatingActionButton:
+            _selectedIndex == 0
+                ? FloatingActionButton.extended(
+                  onPressed: _suggestRandomBook,
+                  icon: const Icon(Icons.auto_awesome),
+                  label: const Text('Suggest Book'),
+                )
+                : null,
       ),
     );
   }
